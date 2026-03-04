@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Gaggle Docs</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/turndown/7.1.2/turndown.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/docx/8.5.0/docx.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231a73e8'/><rect x='7' y='9' width='18' height='2.5' rx='1.25' fill='white'/><rect x='7' y='14.75' width='18' height='2.5' rx='1.25' fill='white'/><rect x='7' y='20.5' width='11' height='2.5' rx='1.25' fill='white'/></svg>"/>
+</head>
+<body>
+
+<!-- ══ TOP BAR ═══════════════════════════════════════════════════ -->
+<header class="topbar">
+  <div class="topbar-left">
+    <div class="app-logo">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+        <rect width="32" height="32" rx="7" fill="#1a73e8"/>
+        <rect x="7" y="9"    width="18" height="2.5" rx="1.25" fill="white"/>
+        <rect x="7" y="14.75" width="18" height="2.5" rx="1.25" fill="white"/>
+        <rect x="7" y="20.5" width="11" height="2.5" rx="1.25" fill="white"/>
+      </svg>
+      <span class="app-logo-text">Gaggle <span class="logo-accent">Docs</span></span>
+    </div>
+    <div class="doc-meta">
+      <div class="doc-title-wrap" id="docTitleWrap" onclick="App.editTitle()">
+        <span class="doc-title-display" id="docTitleDisplay">Untitled document</span>
+        <input class="doc-title" id="docTitle" value="Untitled document" spellcheck="false"
+          onblur="App.commitTitle()" onkeydown="App.titleKeydown(event)"/>
+      </div>
+      <div class="doc-saved" id="savedStatus">All changes saved</div>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <button class="btn-secondary" onclick="App.showSaveDialog()"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+    <button class="btn-secondary" onclick="App.showDocManager()"><i class="fa-solid fa-folder-open"></i> Open</button>
+    <div class="save-dropdown">
+      <button class="btn-primary" id="exportBtn">
+        <i class="fa-solid fa-download"></i> Export
+        <i class="fa-solid fa-chevron-down" style="font-size:10px;margin-left:2px"></i>
+      </button>
+      <div class="save-menu" id="saveMenu">
+        <button onclick="App.saveAs('md')"><i class="fa-brands fa-markdown"></i> Markdown (.md)</button>
+        <button onclick="App.saveAs('docx')"><i class="fa-solid fa-file-word"></i> Word (.docx)</button>
+        <button onclick="App.saveAs('rtf')"><i class="fa-solid fa-file-lines"></i> Rich Text (.rtf)</button>
+        <button onclick="App.saveAs('html')"><i class="fa-brands fa-html5"></i> HTML (.html)</button>
+        <button onclick="App.saveAs('txt')"><i class="fa-solid fa-file-alt"></i> Plain Text (.txt)</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ══ MENU BAR ══════════════════════════════════════════════════ -->
+<nav class="menubar">
+  <div class="menu-group">
+    <span class="menu-label">File</span>
+    <div class="menu-dropdown">
+      <button onclick="App.newDoc()"><i class="fa-solid fa-plus"></i> New document</button>
+      <button onclick="App.showSaveDialog()"><i class="fa-solid fa-floppy-disk"></i> Save <span class="kbd">Ctrl+S</span></button>
+      <button onclick="App.showDocManager()"><i class="fa-solid fa-folder-open"></i> My Documents</button>
+      <hr/>
+      <button onclick="App.printDoc()"><i class="fa-solid fa-print"></i> Print</button>
+      <hr/>
+      <button onclick="App.saveAs('md')"><i class="fa-brands fa-markdown"></i> Download as Markdown</button>
+      <button onclick="App.saveAs('docx')"><i class="fa-solid fa-file-word"></i> Download as Word</button>
+      <button onclick="App.saveAs('rtf')"><i class="fa-solid fa-file-lines"></i> Download as RTF</button>
+    </div>
+  </div>
+  <div class="menu-group">
+    <span class="menu-label">Edit</span>
+    <div class="menu-dropdown">
+      <button onclick="document.execCommand('undo')"><i class="fa-solid fa-rotate-left"></i> Undo <span class="kbd">Ctrl+Z</span></button>
+      <button onclick="document.execCommand('redo')"><i class="fa-solid fa-rotate-right"></i> Redo <span class="kbd">Ctrl+Y</span></button>
+      <hr/>
+      <button onclick="document.execCommand('cut')"><i class="fa-solid fa-scissors"></i> Cut</button>
+      <button onclick="document.execCommand('copy')"><i class="fa-regular fa-copy"></i> Copy</button>
+      <button onclick="document.execCommand('paste')"><i class="fa-solid fa-paste"></i> Paste</button>
+      <hr/>
+      <button onclick="App.selectAll()"><i class="fa-solid fa-object-group"></i> Select all</button>
+      <button onclick="App.toggleFind()"><i class="fa-solid fa-magnifying-glass"></i> Find &amp; Replace <span class="kbd">Ctrl+H</span></button>
+    </div>
+  </div>
+  <div class="menu-group">
+    <span class="menu-label">Format</span>
+    <div class="menu-dropdown">
+      <button onclick="App.fmt('bold')"><i class="fa-solid fa-bold"></i> Bold <span class="kbd">Ctrl+B</span></button>
+      <button onclick="App.fmt('italic')"><i class="fa-solid fa-italic"></i> Italic <span class="kbd">Ctrl+I</span></button>
+      <button onclick="App.fmt('underline')"><i class="fa-solid fa-underline"></i> Underline <span class="kbd">Ctrl+U</span></button>
+      <hr/>
+      <button onclick="App.clearFormat()"><i class="fa-solid fa-eraser"></i> Clear formatting</button>
+    </div>
+  </div>
+  <div class="menu-group">
+    <span class="menu-label">Insert</span>
+    <div class="menu-dropdown">
+      <button onclick="App.insertLink()"><i class="fa-solid fa-link"></i> Link</button>
+      <button onclick="App.insertHR()"><i class="fa-solid fa-minus"></i> Horizontal line</button>
+      <button onclick="App.insertTable()"><i class="fa-solid fa-table"></i> Table (3×3)</button>
+      <button onclick="App.insertImage()"><i class="fa-solid fa-image"></i> Image from URL</button>
+    </div>
+  </div>
+  <div class="menu-group">
+    <span class="menu-label">View</span>
+    <div class="menu-dropdown">
+      <button onclick="App.toggleOutline()"><i class="fa-solid fa-list-ul"></i> Document outline <span class="kbd">Ctrl+Alt+O</span></button>
+    </div>
+  </div>
+</nav>
+
+<!-- ══ TOOLBAR ═══════════════════════════════════════════════════ -->
+<div class="toolbar" id="toolbar">
+  <button class="tb-btn" title="Undo" onclick="document.execCommand('undo')"><i class="fa-solid fa-rotate-left"></i></button>
+  <button class="tb-btn" title="Redo" onclick="document.execCommand('redo')"><i class="fa-solid fa-rotate-right"></i></button>
+  <div class="tb-sep"></div>
+
+  <select class="tb-select heading-select" id="headingStyle" title="Paragraph style" onchange="App.setHeading(this.value)">
+    <option value="p">Normal text</option>
+    <option value="h1">Heading 1</option>
+    <option value="h2">Heading 2</option>
+    <option value="h3">Heading 3</option>
+    <option value="h4">Heading 4</option>
+    <option value="pre">Code block</option>
+    <option value="blockquote">Quote</option>
+  </select>
+  <div class="tb-sep"></div>
+
+  <select class="tb-select font-family-select" id="fontFamily" title="Font family" onchange="App.setFont(this.value)">
+    <option value="Georgia">Georgia</option>
+    <option value="'Times New Roman'">Times New Roman</option>
+    <option value="Arial">Arial</option>
+    <option value="Helvetica">Helvetica</option>
+    <option value="'Courier New'">Courier New</option>
+    <option value="Verdana">Verdana</option>
+    <option value="Garamond">Garamond</option>
+    <option value="'Trebuchet MS'">Trebuchet MS</option>
+    <option value="Palatino">Palatino</option>
+    <option value="'Book Antiqua'">Book Antiqua</option>
+  </select>
+  <select class="tb-select font-size-select" id="fontSize" title="Font size" onchange="App.setFontSize(this.value)">
+    <option>8</option><option>9</option><option>10</option>
+    <option>11</option><option>12</option><option>14</option>
+    <option>16</option><option>18</option><option>20</option>
+    <option>24</option><option>28</option><option>32</option>
+    <option>36</option><option>48</option><option>72</option>
+  </select>
+  <div class="tb-sep"></div>
+
+  <button class="tb-btn fmt-btn" id="btnBold"      title="Bold (Ctrl+B)"      onclick="App.fmt('bold')"><i class="fa-solid fa-bold"></i></button>
+  <button class="tb-btn fmt-btn" id="btnItalic"    title="Italic (Ctrl+I)"    onclick="App.fmt('italic')"><i class="fa-solid fa-italic"></i></button>
+  <button class="tb-btn fmt-btn" id="btnUnderline" title="Underline (Ctrl+U)" onclick="App.fmt('underline')"><i class="fa-solid fa-underline"></i></button>
+  <button class="tb-btn fmt-btn" id="btnStrike"    title="Strikethrough"      onclick="App.fmt('strikeThrough')"><i class="fa-solid fa-strikethrough"></i></button>
+  <div class="tb-sep"></div>
+
+  <!-- Text color -->
+  <div class="color-btn-wrap" title="Text color">
+    <button class="tb-btn" id="btnTextColor">
+      <i class="fa-solid fa-font"></i>
+      <span class="color-swatch" id="textColorSwatch" style="background:#000"></span>
+    </button>
+    <input type="color" class="hidden-color" id="textColor" value="#000000" oninput="App.setTextColor(this.value)"/>
+  </div>
+
+  <!-- Highlight with custom swatch picker -->
+  <div class="hl-wrap" id="hlWrap">
+    <button class="tb-btn" id="btnHighlight" title="Highlight color" onclick="App.toggleHlPicker(event)">
+      <i class="fa-solid fa-highlighter"></i>
+      <span class="color-swatch" id="hlColorSwatch" style="background:#FFFF00"></span>
+    </button>
+    <div class="hl-picker" id="hlPicker" style="display:none">
+      <div class="hl-picker-title">Highlight color</div>
+      <div class="hl-swatches" id="hlSwatches"></div>
+      <button class="hl-none-btn" onclick="App.setHighlight(null)">
+        <i class="fa-solid fa-ban"></i> None
+      </button>
+    </div>
+  </div>
+  <div class="tb-sep"></div>
+
+  <button class="tb-btn" title="Align left"   onclick="App.fmt('justifyLeft')"><i class="fa-solid fa-align-left"></i></button>
+  <button class="tb-btn" title="Align center" onclick="App.fmt('justifyCenter')"><i class="fa-solid fa-align-center"></i></button>
+  <button class="tb-btn" title="Align right"  onclick="App.fmt('justifyRight')"><i class="fa-solid fa-align-right"></i></button>
+  <button class="tb-btn" title="Justify"      onclick="App.fmt('justifyFull')"><i class="fa-solid fa-align-justify"></i></button>
+  <div class="tb-sep"></div>
+
+  <button class="tb-btn" title="Bullet list"     onclick="App.fmt('insertUnorderedList')"><i class="fa-solid fa-list-ul"></i></button>
+  <button class="tb-btn" title="Numbered list"   onclick="App.fmt('insertOrderedList')"><i class="fa-solid fa-list-ol"></i></button>
+  <button class="tb-btn" title="Increase indent" onclick="App.fmt('indent')"><i class="fa-solid fa-indent"></i></button>
+  <button class="tb-btn" title="Decrease indent" onclick="App.fmt('outdent')"><i class="fa-solid fa-outdent"></i></button>
+  <div class="tb-sep"></div>
+
+  <button class="tb-btn" title="Insert link"      onclick="App.insertLink()"><i class="fa-solid fa-link"></i></button>
+  <button class="tb-btn" title="Clear formatting" onclick="App.clearFormat()"><i class="fa-solid fa-eraser"></i></button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" id="btnOutline" title="Document outline (Ctrl+Alt+O)" onclick="App.toggleOutline()">
+    <i class="fa-solid fa-list-ul"></i>
+  </button>
+  <button class="tb-btn" id="btnNovelMode" title="Novel mode" onclick="App.toggleNovelMode()">
+    <i class="fa-solid fa-book-open"></i>
+  </button>
+
+  <div class="tb-wordcount" id="wordCount">0 words</div>
+</div>
+
+<!-- ══ FIND & REPLACE ════════════════════════════════════════════ -->
+<div class="find-bar" id="findBar" style="display:none">
+  <input type="text" id="findInput"    placeholder="Find..."/>
+  <input type="text" id="replaceInput" placeholder="Replace..."/>
+  <button onclick="App.findReplace()">Replace all</button>
+  <button onclick="App.toggleFind()"><i class="fa-solid fa-xmark"></i></button>
+</div>
+
+<!-- ══ BODY WRAP: sidebar + canvas ══════════════════════════════ -->
+<div class="body-wrap" id="bodyWrap">
+
+  <!-- Document Outline Sidebar -->
+  <aside class="outline-sidebar" id="outlineSidebar">
+    <div class="outline-header">
+      <span class="outline-title">
+        <i class="fa-solid fa-list-ul" style="margin-right:6px;font-size:13px;color:var(--muted)"></i>
+        Document outline
+      </span>
+      <button class="outline-close-btn" onclick="App.toggleOutline()" title="Close">
+        <i class="fa-solid fa-chevron-left"></i>
+      </button>
+    </div>
+    <div class="outline-list" id="outlineList">
+      <div class="outline-empty">Add headings to your document to see them here.</div>
+    </div>
+  </aside>
+
+  <!-- Page Canvas -->
+  <main class="canvas" id="canvas" onclick="App.focusEditor()">
+    <div class="page" id="page">
+      <div class="editor" id="editor" contenteditable="true" spellcheck="true" data-placeholder="Start typing..."></div>
+    </div>
+  </main>
+
+</div>
+
+<!-- ══ STATUS BAR ════════════════════════════════════════════════ -->
+<footer class="statusbar">
+  <span id="statusWordCount">0 words / 0 characters</span>
+  <span>|</span>
+  <span id="statusZoom">100%</span>
+  <button class="zoom-btn" onclick="App.zoom(-10)">−</button>
+  <button class="zoom-btn" onclick="App.zoom(+10)">+</button>
+  <span style="margin-left:auto"></span>
+  <button class="zoom-btn" id="settingsBtn" onclick="App.toggleSettings(event)" title="Settings" style="width:26px;font-size:13px;">⚙</button>
+</footer>
+
+<!-- ══ SAVE DIALOG ════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="saveDialog" style="display:none" onclick="if(event.target===this)App.closeSaveDialog()">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Save Document</h3>
+      <button class="modal-close" onclick="App.closeSaveDialog()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body">
+      <label class="field-label">Document name</label>
+      <input type="text" class="modal-input" id="saveNameInput" placeholder="My document"/>
+      <p class="modal-hint">Saved locally in your browser. Use Export to download a file.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="App.closeSaveDialog()">Cancel</button>
+      <button class="btn-primary" onclick="App.confirmSave()"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ DOC MANAGER ════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="docManager" style="display:none" onclick="if(event.target===this)App.closeDocManager()">
+  <div class="modal modal-wide">
+    <div class="modal-header">
+      <h3>My Documents</h3>
+      <button class="modal-close" onclick="App.closeDocManager()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body">
+      <div id="docList" class="doc-list"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="document.getElementById('openFileInput').click()">
+        <i class="fa-solid fa-upload"></i> Import file (.html / .md / .txt / .docx)
+      </button>
+      <button class="btn-ghost" onclick="App.closeDocManager()">Close</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="openFileInput" accept=".html,.htm,.txt,.md,.docx" style="display:none" onchange="App.handleFileOpen(event)"/>
+
+<!-- ══ SETTINGS PANEL ════════════════════════════════════════════ -->
+<div class="settings-panel" id="settingsPanel">
+  <div class="settings-title">⚙ Settings</div>
+
+  <div class="settings-section">
+    <span class="settings-label">UI Theme</span>
+    <div class="theme-options" id="uiThemeOptions">
+      <button class="theme-chip active" data-ui="light" onclick="App.setUiTheme('light')">
+        <span class="theme-chip-dot" style="background:#ffffff"></span>Light
+      </button>
+      <button class="theme-chip" data-ui="sepia" onclick="App.setUiTheme('sepia')">
+        <span class="theme-chip-dot" style="background:#fdf8f0"></span>Sepia
+      </button>
+      <button class="theme-chip" data-ui="dark" onclick="App.setUiTheme('dark')">
+        <span class="theme-chip-dot" style="background:#252525"></span>Dark
+      </button>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <span class="settings-label">Page Theme</span>
+    <div class="theme-options" id="pageThemeOptions">
+      <button class="theme-chip active" data-page="light" onclick="App.setPageTheme('light')">
+        <span class="theme-chip-dot" style="background:#ffffff"></span>Light
+      </button>
+      <button class="theme-chip" data-page="sepia" onclick="App.setPageTheme('sepia')">
+        <span class="theme-chip-dot" style="background:#fdf8f0"></span>Sepia
+      </button>
+      <button class="theme-chip" data-page="dark" onclick="App.setPageTheme('dark')">
+        <span class="theme-chip-dot" style="background:#2c2c2c"></span>Dark
+      </button>
+    </div>
+  </div>
+
+  <div class="settings-divider"></div>
+
+  <div class="settings-section">
+    <span class="settings-label">Default Editor Settings</span>
+
+    <label class="settings-sublabel">Font</label>
+    <select class="settings-select" id="defaultFont" onchange="App.saveDefaultSettings()">
+      <option value="Georgia">Georgia</option>
+      <option value="'Times New Roman'">Times New Roman</option>
+      <option value="Arial">Arial</option>
+      <option value="Helvetica">Helvetica</option>
+      <option value="'Courier New'">Courier New</option>
+      <option value="Verdana">Verdana</option>
+      <option value="Garamond">Garamond</option>
+      <option value="Palatino">Palatino</option>
+    </select>
+
+    <label class="settings-sublabel">Font Size</label>
+    <select class="settings-select" id="defaultFontSize" onchange="App.saveDefaultSettings()">
+      <option value="10">10pt</option>
+      <option value="11">11pt</option>
+      <option value="12" selected>12pt</option>
+      <option value="14">14pt</option>
+      <option value="16">16pt</option>
+      <option value="18">18pt</option>
+    </select>
+
+    <label class="settings-sublabel">Line Spacing</label>
+    <select class="settings-select" id="defaultLineSpacing" onchange="App.saveDefaultSettings()">
+      <option value="1.4">Compact (1.4×)</option>
+      <option value="1.6" selected>Normal (1.6×)</option>
+      <option value="2.0">Double (2×)</option>
+    </select>
+
+    <label class="settings-sublabel">Zoom</label>
+    <select class="settings-select" id="defaultZoom" onchange="App.saveDefaultSettings()">
+      <option value="75">75%</option>
+      <option value="90">90%</option>
+      <option value="100" selected>100%</option>
+      <option value="115">115%</option>
+      <option value="125">125%</option>
+      <option value="150">150%</option>
+    </select>
+  </div>
+
+  <div class="settings-divider"></div>
+
+  <div class="settings-section">
+    <div class="settings-label-row">
+      <span class="settings-label">Novel Mode</span>
+      <button class="toggle-switch" id="novelToggleSwitch" onclick="App.toggleNovelMode()">
+        <span class="toggle-knob"></span>
+      </button>
+    </div>
+  </div>
+
+  <div id="novelSettings" class="novel-settings" style="display:none">
+    <div class="settings-section">
+      <label class="settings-label">Font</label>
+      <select class="settings-select" id="novelFont" onchange="App.applyNovelSettings()">
+        <option value="'Times New Roman', serif">Times New Roman</option>
+        <option value="Georgia, serif">Georgia</option>
+        <option value="Garamond, serif">Garamond</option>
+        <option value="Palatino, serif">Palatino</option>
+        <option value="'Book Antiqua', serif">Book Antiqua</option>
+      </select>
+    </div>
+    <div class="settings-section">
+      <label class="settings-label">Font Size</label>
+      <select class="settings-select" id="novelFontSize" onchange="App.applyNovelSettings()">
+        <option value="11pt">11pt</option>
+        <option value="12pt" selected>12pt</option>
+        <option value="13pt">13pt</option>
+        <option value="14pt">14pt</option>
+      </select>
+    </div>
+    <div class="settings-section">
+      <label class="settings-label">Line Spacing</label>
+      <select class="settings-select" id="novelLineSpacing" onchange="App.applyNovelSettings()">
+        <option value="1.5">1.5×</option>
+        <option value="2" selected>Double (2×)</option>
+        <option value="1.8">1.8×</option>
+      </select>
+    </div>
+    <div class="settings-section">
+      <label class="settings-label">Paragraph Indent</label>
+      <select class="settings-select" id="novelIndent" onchange="App.applyNovelSettings()">
+        <option value="2em">Standard (2em)</option>
+        <option value="1em">Narrow (1em)</option>
+        <option value="3em">Wide (3em)</option>
+      </select>
+    </div>
+    <div class="settings-section">
+      <label class="settings-label-row">
+        <span class="settings-label" style="margin-bottom:0">Drop cap</span>
+        <input type="checkbox" id="novelDropCap" onchange="App.applyNovelSettings()" checked style="margin-left:auto">
+      </label>
+    </div>
+    <div class="settings-section" style="margin-bottom:0">
+      <button class="btn-secondary" style="width:100%;justify-content:center;font-size:12px" onclick="App.insertSceneBreak()">
+        <i class="fa-solid fa-minus"></i> Insert scene break
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
