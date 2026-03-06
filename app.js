@@ -781,64 +781,105 @@ const App = (() => {
   }
 
   async function exportDocx(title, html) {
-    var D    = docx;
-    var doc2 = new DOMParser().parseFromString(html, 'text/html');
-    var els  = [];
+    try {
+      var D    = docx;
+      var doc2 = new DOMParser().parseFromString(html, 'text/html');
+      var els  = [];
 
-    function runs(node) {
-      if (node.nodeType === Node.TEXT_NODE) return node.textContent ? [{text: node.textContent}] : [];
-      var tag = (node.tagName || '').toLowerCase();
-      var b = tag==='strong'||tag==='b', i=tag==='em'||tag==='i', u=tag==='u', s=tag==='s'||tag==='strike';
-      var out = [];
-      if (node.childNodes) {
-        Array.from(node.childNodes).forEach(function(c) {
-          runs(c).forEach(function(r) {
-            out.push({text:r.text, bold:r.bold||b, italics:r.italics||i,
-              underline: r.underline||(u?{type:'single'}:undefined), strike:r.strike||s});
+      // docx v8 UMD uses plain string values for HeadingLevel and WidthType
+      // D.HeadingLevel and D.WidthType may be undefined in the UMD bundle,
+      // so we define the string literals directly.
+      var HEADING_MAP = {
+        h1: 'Heading1',
+        h2: 'Heading2',
+        h3: 'Heading3',
+        h4: 'Heading4'
+      };
+      var WIDTH_PCT = (D.WidthType && D.WidthType.PERCENTAGE) ? D.WidthType.PERCENTAGE : 'pct';
+
+      function runs(node) {
+        if (node.nodeType === Node.TEXT_NODE) return node.textContent ? [{text: node.textContent}] : [];
+        var tag = (node.tagName || '').toLowerCase();
+        var b = tag==='strong'||tag==='b', i=tag==='em'||tag==='i', u=tag==='u', s=tag==='s'||tag==='strike';
+        var out = [];
+        if (node.childNodes) {
+          Array.from(node.childNodes).forEach(function(c) {
+            runs(c).forEach(function(r) {
+              out.push({
+                text: r.text,
+                bold: r.bold || b,
+                italics: r.italics || i,
+                // docx v8: underline takes {type: 'single'} — use string form for compatibility
+                underline: r.underline || (u ? {type: 'single'} : undefined),
+                strike: r.strike || s
+              });
+            });
           });
+        }
+        return out;
+      }
+
+      function toDocx(el) {
+        if (el.nodeType === Node.TEXT_NODE) {
+          var t = el.textContent.trim();
+          return t ? [new D.Paragraph({children: [new D.TextRun({text: t})]})] : [];
+        }
+        if (el.nodeType !== Node.ELEMENT_NODE) return [];
+        var tag = el.tagName.toLowerCase();
+        var r   = runs(el).map(function(x) { return new D.TextRun(x); });
+
+        if (HEADING_MAP[tag]) return [new D.Paragraph({heading: HEADING_MAP[tag], children: r})];
+        if (tag==='p' || tag==='div') return [new D.Paragraph({children: r})];
+        if (tag==='ul') return Array.from(el.querySelectorAll('li')).map(function(li) {
+          return new D.Paragraph({bullet: {level: 0}, children: [new D.TextRun({text: li.innerText.trim()})]});
         });
-      }
-      return out;
-    }
-
-    function toDocx(el) {
-      if (el.nodeType === Node.TEXT_NODE) {
-        var t = el.textContent.trim();
-        return t ? [new D.Paragraph({children:[new D.TextRun({text:t})]})] : [];
-      }
-      if (el.nodeType !== Node.ELEMENT_NODE) return [];
-      var tag = el.tagName.toLowerCase();
-      var r   = runs(el).map(function(x) { return new D.TextRun(x); });
-      var hm  = {h1:D.HeadingLevel.HEADING_1, h2:D.HeadingLevel.HEADING_2, h3:D.HeadingLevel.HEADING_3, h4:D.HeadingLevel.HEADING_4};
-      if (hm[tag]) return [new D.Paragraph({heading:hm[tag], children:r})];
-      if (tag==='p'||tag==='div') return [new D.Paragraph({children:r})];
-      if (tag==='ul') return Array.from(el.querySelectorAll('li')).map(function(li) {
-        return new D.Paragraph({bullet:{level:0}, children:[new D.TextRun({text:li.innerText.trim()})]});
-      });
-      if (tag==='ol') return Array.from(el.querySelectorAll('li')).map(function(li, i) {
-        return new D.Paragraph({children:[new D.TextRun({text:(i+1)+'. '+li.innerText.trim()})]});
-      });
-      if (tag==='blockquote') return [new D.Paragraph({indent:{left:720}, children:[new D.TextRun({text:el.innerText.trim(),italics:true,color:'555555'})]})];
-      if (tag==='pre') return [new D.Paragraph({children:[new D.TextRun({text:el.innerText,font:'Courier New',size:20})]})];
-      if (tag==='hr') return [new D.Paragraph({thematicBreak:true, children:[]})];
-      if (tag==='table') {
-        var trows = Array.from(el.querySelectorAll('tr')).map(function(row) {
-          return new D.TableRow({children: Array.from(row.querySelectorAll('th,td')).map(function(td) {
-            return new D.TableCell({children:[new D.Paragraph({children:[new D.TextRun({text:td.innerText.trim(),bold:td.tagName.toLowerCase()==='th'})]})],margins:{top:60,bottom:60,left:100,right:100}});
-          })});
+        if (tag==='ol') return Array.from(el.querySelectorAll('li')).map(function(li, idx) {
+          return new D.Paragraph({children: [new D.TextRun({text: (idx+1) + '. ' + li.innerText.trim()})]});
         });
-        return [new D.Table({rows:trows, width:{size:100,type:D.WidthType.PERCENTAGE}})];
+        if (tag==='blockquote') return [new D.Paragraph({
+          indent: {left: 720},
+          children: [new D.TextRun({text: el.innerText.trim(), italics: true, color: '555555'})]
+        })];
+        if (tag==='pre') return [new D.Paragraph({
+          // docx v8: font must be {name: "..."} not a bare string
+          children: [new D.TextRun({text: el.innerText, font: {name: 'Courier New'}, size: 20})]
+        })];
+        if (tag==='hr') return [new D.Paragraph({thematicBreak: true, children: []})];
+        if (tag==='table') {
+          var trows = Array.from(el.querySelectorAll('tr')).map(function(row) {
+            return new D.TableRow({
+              children: Array.from(row.querySelectorAll('th,td')).map(function(cell) {
+                return new D.TableCell({
+                  children: [new D.Paragraph({
+                    children: [new D.TextRun({
+                      text: cell.innerText.trim(),
+                      bold: cell.tagName.toLowerCase() === 'th'
+                    })]
+                  })],
+                  margins: {top: 60, bottom: 60, left: 100, right: 100}
+                });
+              })
+            });
+          });
+          return [new D.Table({rows: trows, width: {size: 100, type: WIDTH_PCT}})];
+        }
+        var tv = el.innerText && el.innerText.trim();
+        return tv ? [new D.Paragraph({children: [new D.TextRun({text: tv})]})] : [];
       }
-      var tv = el.innerText && el.innerText.trim();
-      return tv ? [new D.Paragraph({children:[new D.TextRun({text:tv})]})] : [];
+
+      Array.from(doc2.body.childNodes).forEach(function(el) {
+        toDocx(el).forEach(function(e) { els.push(e); });
+      });
+
+      // Ensure there is at least one child element (docx requires non-empty sections)
+      if (!els.length) els.push(new D.Paragraph({children: []}));
+
+      var blob = await D.Packer.toBlob(new D.Document({sections: [{properties: {}, children: els}]}));
+      saveBlob(blob, title + '.docx');
+    } catch(err) {
+      console.error('DOCX export error:', err);
+      alert('Export to .docx failed: ' + (err && err.message ? err.message : err));
     }
-
-    Array.from(doc2.body.childNodes).forEach(function(el) {
-      toDocx(el).forEach(function(e) { els.push(e); });
-    });
-
-    var blob = await D.Packer.toBlob(new D.Document({sections:[{properties:{}, children:els}]}));
-    saveBlob(blob, title + '.docx');
   }
 
   function exportRTF(title, html) {
