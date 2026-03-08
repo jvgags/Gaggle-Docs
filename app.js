@@ -30,12 +30,16 @@ const App = (() => {
   let pageTheme    = 'light';
   let settingsOpen = false;
   let novelMode    = false;
+  let activeFolderId = 'all'; // 'all' | 'unfiled' | <folderId>
+  let openMoveFolderDocId = null;
 
   const DEFAULT_SETTINGS_KEY = 'gd_default_settings';
   const DEFAULT_SETTINGS = { font: 'Georgia', fontSize: '12', lineSpacing: '1.6', zoom: '100' };
 
-  const STORE_PREFIX = 'docs_v1_';
-  const INDEX_KEY    = 'docs_v1_index';
+  const STORE_PREFIX  = 'docs_v1_';
+  const INDEX_KEY     = 'docs_v1_index';
+  const FOLDER_PREFIX = 'folder_v1_';
+  const FOLDER_INDEX  = 'folder_v1_index';
 
   // Highlight color palette (Google Docs-style)
   const HL_COLORS = [
@@ -143,6 +147,10 @@ const App = (() => {
           && e.target.id !== 'settingsBtn') {
         settingsOpen = false;
         document.getElementById('settingsPanel').classList.remove('open');
+      }
+      // Close any open move-to-folder menus
+      if (!e.target.closest('.move-folder-wrap')) {
+        closeAllMoveFolderMenus();
       }
     });
 
@@ -465,8 +473,15 @@ const App = (() => {
   // ── STORAGE ──────────────────────────────────────────────────
   function getIndex() { try { return JSON.parse(localStorage.getItem(INDEX_KEY) || '[]'); } catch(e) { return []; } }
   function setIndex(arr) { localStorage.setItem(INDEX_KEY, JSON.stringify(arr)); }
-  function persistDoc(id, title, content) {
-    var doc = { id: id, title: title || 'Untitled', content: content, modified: Date.now() };
+  function persistDoc(id, title, content, folderId) {
+    var existing = loadDocById(id) || {};
+    var doc = {
+      id: id,
+      title: title || 'Untitled',
+      content: content,
+      modified: Date.now(),
+      folderId: folderId !== undefined ? folderId : (existing.folderId || null)
+    };
     localStorage.setItem(STORE_PREFIX + id, JSON.stringify(doc));
     var idx = getIndex();
     setIndex([id].concat(idx.filter(function(x) { return x !== id; })));
@@ -477,6 +492,32 @@ const App = (() => {
     setIndex(getIndex().filter(function(x) { return x !== id; }));
   }
   function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+  // ── FOLDER STORAGE ────────────────────────────────────────────
+  function getFolderIndex() { try { return JSON.parse(localStorage.getItem(FOLDER_INDEX) || '[]'); } catch(e) { return []; } }
+  function setFolderIndex(arr) { localStorage.setItem(FOLDER_INDEX, JSON.stringify(arr)); }
+  function persistFolder(id, name) {
+    var folder = { id: id, name: name, created: Date.now() };
+    localStorage.setItem(FOLDER_PREFIX + id, JSON.stringify(folder));
+    var idx = getFolderIndex();
+    if (idx.indexOf(id) === -1) setFolderIndex(idx.concat(id));
+  }
+  function loadFolderById(id) { try { return JSON.parse(localStorage.getItem(FOLDER_PREFIX + id)); } catch(e) { return null; } }
+  function deleteFolderById(id) {
+    localStorage.removeItem(FOLDER_PREFIX + id);
+    setFolderIndex(getFolderIndex().filter(function(x) { return x !== id; }));
+    // Move docs in this folder to unfiled
+    getIndex().forEach(function(docId) {
+      var doc = loadDocById(docId);
+      if (doc && doc.folderId === id) persistDoc(docId, doc.title, doc.content, null);
+    });
+  }
+  function countDocsInFolder(folderId) {
+    return getIndex().filter(function(id) {
+      var doc = loadDocById(id);
+      return doc && (folderId === null ? !doc.folderId : doc.folderId === folderId);
+    }).length;
+  }
 
   // ── SAVE DIALOG ──────────────────────────────────────────────
   function showSaveDialog() {
@@ -495,29 +536,257 @@ const App = (() => {
   }
 
   // ── DOC MANAGER ──────────────────────────────────────────────
-  function showDocManager() { renderDocList(); document.getElementById('docManager').style.display = 'flex'; }
-  function closeDocManager() { document.getElementById('docManager').style.display = 'none'; }
+  function showDocManager() {
+    document.getElementById('docManager').style.display = 'flex';
+    renderFolderList();
+    renderDocList();
+  }
+  function closeDocManager() {
+    document.getElementById('docManager').style.display = 'none';
+    closeAllMoveFolderMenus();
+  }
+
+  function renderFolderList() {
+    var list    = document.getElementById('driveFolderList');
+    var folders = getFolderIndex().map(loadFolderById).filter(Boolean);
+    var allCount    = getIndex().length;
+    var unfiledCount = countDocsInFolder(null);
+
+    var html = '';
+
+    // All Documents
+    html += '<button class="drive-folder-item' + (activeFolderId === 'all' ? ' active' : '') + '" onclick="App.selectFolder(\'all\')">' +
+      '<i class="fa-solid fa-layer-group folder-icon" style="color:var(--accent)"></i>' +
+      '<span class="folder-name">All Documents</span>' +
+      '<span class="folder-count">' + allCount + '</span>' +
+      '</button>';
+
+    // Unfiled
+    html += '<button class="drive-folder-item' + (activeFolderId === 'unfiled' ? ' active' : '') + '" onclick="App.selectFolder(\'unfiled\')">' +
+      '<i class="fa-solid fa-inbox folder-icon" style="color:var(--muted)"></i>' +
+      '<span class="folder-name">Unfiled</span>' +
+      '<span class="folder-count">' + unfiledCount + '</span>' +
+      '</button>';
+
+    if (folders.length) {
+      html += '<div class="drive-folder-sep"></div>';
+      folders.forEach(function(f) {
+        var count = countDocsInFolder(f.id);
+        var isActive = activeFolderId === f.id;
+        html += '<div class="drive-folder-item' + (isActive ? ' active' : '') + '" onclick="App.selectFolder(\'' + f.id + '\')">' +
+          '<i class="fa-solid fa-folder folder-icon"></i>' +
+          '<span class="folder-name">' + escHtml(f.name) + '</span>' +
+          '<span class="folder-count">' + count + '</span>' +
+          '<span class="folder-actions" onclick="event.stopPropagation()">' +
+            '<button class="folder-action-btn" title="Rename" onclick="App.renameFolder(\'' + f.id + '\')">' +
+              '<i class="fa-solid fa-pencil"></i></button>' +
+            '<button class="folder-action-btn" title="Delete" onclick="App.deleteFolder(\'' + f.id + '\')" style="color:#c00">' +
+              '<i class="fa-solid fa-trash"></i></button>' +
+          '</span>' +
+          '</div>';
+      });
+    }
+
+    list.innerHTML = html;
+  }
+
   function renderDocList() {
     var list = document.getElementById('docList');
     var idx  = getIndex();
-    if (!idx.length) {
-      list.innerHTML = '<div class="doc-empty"><i class="fa-solid fa-file-circle-xmark" style="font-size:32px;opacity:.3;display:block;margin:0 auto 12px"></i>No saved documents yet.</div>';
+    var folders = getFolderIndex().map(loadFolderById).filter(Boolean);
+
+    // Filter by active folder
+    var filtered = idx.filter(function(id) {
+      var doc = loadDocById(id);
+      if (!doc) return false;
+      if (activeFolderId === 'all')    return true;
+      if (activeFolderId === 'unfiled') return !doc.folderId;
+      return doc.folderId === activeFolderId;
+    });
+
+    // Update breadcrumb
+    var crumb = document.getElementById('driveBreadcrumb');
+    if (activeFolderId === 'all') {
+      crumb.innerHTML = '<span class="crumb-current"><i class="fa-solid fa-layer-group" style="margin-right:6px;color:var(--accent)"></i>All Documents</span>';
+    } else if (activeFolderId === 'unfiled') {
+      crumb.innerHTML = '<span class="crumb-current"><i class="fa-solid fa-inbox" style="margin-right:6px;color:var(--muted)"></i>Unfiled</span>';
+    } else {
+      var f = loadFolderById(activeFolderId);
+      crumb.innerHTML =
+        '<span class="crumb" onclick="App.selectFolder(\'all\')">All Documents</span>' +
+        '<span class="crumb-sep"><i class="fa-solid fa-chevron-right"></i></span>' +
+        '<span class="crumb-current"><i class="fa-solid fa-folder" style="margin-right:6px;color:#f4b942"></i>' + escHtml(f ? f.name : 'Folder') + '</span>';
+    }
+
+    if (!filtered.length) {
+      var emptyMsg = activeFolderId === 'all'
+        ? 'No saved documents yet.'
+        : activeFolderId === 'unfiled'
+          ? 'No unfiled documents.'
+          : 'This folder is empty. Move documents here using the <i class="fa-solid fa-folder-arrow-down"></i> button.';
+      list.innerHTML = '<div class="doc-empty"><i class="fa-solid fa-file-circle-xmark" style="font-size:28px;opacity:.3;display:block;margin:0 auto 10px"></i>' + emptyMsg + '</div>';
       return;
     }
-    list.innerHTML = idx.map(function(id) {
+
+    list.innerHTML = filtered.map(function(id) {
       var doc = loadDocById(id);
       if (!doc) return '';
       var date = new Date(doc.modified).toLocaleString(undefined, {month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
       var active = (id === currentDocId) ? ' style="border-color:var(--accent);background:var(--active)"' : '';
+
+      // Folder badge (only in All view)
+      var folderBadge = '';
+      if (activeFolderId === 'all' && doc.folderId) {
+        var docFolder = loadFolderById(doc.folderId);
+        if (docFolder) {
+          folderBadge = '<div class="doc-item-folder"><i class="fa-solid fa-folder"></i>' + escHtml(docFolder.name) + '</div>';
+        }
+      }
+
       return '<div class="doc-item"' + active + ' onclick="App.openDoc(\'' + id + '\')">' +
         '<i class="fa-solid fa-file-lines doc-item-icon"></i>' +
-        '<div class="doc-item-info"><div class="doc-item-title">' + escHtml(doc.title) + '</div>' +
-        '<div class="doc-item-date">Last edited ' + date + '</div></div>' +
+        '<div class="doc-item-info">' +
+          '<div class="doc-item-title">' + escHtml(doc.title) + '</div>' +
+          '<div class="doc-item-date">Last edited ' + date + '</div>' +
+          folderBadge +
+        '</div>' +
         '<button class="doc-item-action" title="Duplicate" onclick="event.stopPropagation();App.duplicateDoc(\'' + id + '\')">' +
-        '<i class="fa-solid fa-copy"></i></button>' +
+          '<i class="fa-solid fa-copy"></i></button>' +
+        '<button class="doc-item-action" title="Move to folder" onclick="event.stopPropagation();App.toggleMoveFolderMenu(\'' + id + '\', this)">' +
+          '<i class="fa-solid fa-folder-open"></i></button>' +
         '<button class="doc-item-del" title="Delete" onclick="event.stopPropagation();App.deleteDoc(\'' + id + '\')">' +
-        '<i class="fa-solid fa-trash"></i></button></div>';
+          '<i class="fa-solid fa-trash"></i></button>' +
+        '</div>';
     }).join('');
+  }
+
+  function selectFolder(id) {
+    activeFolderId = id;
+    renderFolderList();
+    renderDocList();
+  }
+
+  function newFolder() {
+    var name = prompt('Folder name:');
+    if (!name || !name.trim()) return;
+    var id = genId();
+    persistFolder(id, name.trim());
+    activeFolderId = id;
+    renderFolderList();
+    renderDocList();
+  }
+
+  function renameFolder(id) {
+    var folder = loadFolderById(id);
+    if (!folder) return;
+    var name = prompt('Rename folder:', folder.name);
+    if (!name || !name.trim()) return;
+    persistFolder(id, name.trim());
+    renderFolderList();
+    renderDocList();
+  }
+
+  function deleteFolder(id) {
+    var folder = loadFolderById(id);
+    if (!folder) return;
+    var count = countDocsInFolder(id);
+    var msg = 'Delete folder "' + folder.name + '"?';
+    if (count) msg += '\n\n' + count + ' document' + (count !== 1 ? 's' : '') + ' will be moved to Unfiled.';
+    if (!confirm(msg)) return;
+    deleteFolderById(id);
+    if (activeFolderId === id) activeFolderId = 'all';
+    renderFolderList();
+    renderDocList();
+  }
+
+  function moveDocToFolder(docId, folderId) {
+    var doc = loadDocById(docId);
+    if (!doc) return;
+    persistDoc(docId, doc.title, doc.content, folderId || null);
+    closeAllMoveFolderMenus();
+    renderFolderList();
+    renderDocList();
+  }
+
+  function toggleMoveFolderMenu(docId, btnEl) {
+    // If same menu already open, close it
+    var existing = document.getElementById('globalMoveMenu');
+    if (existing && existing.dataset.docId === docId) {
+      closeAllMoveFolderMenus();
+      return;
+    }
+    closeAllMoveFolderMenus();
+
+    var doc     = loadDocById(docId);
+    if (!doc) return;
+    var folders = getFolderIndex().map(loadFolderById).filter(Boolean);
+
+    // Build menu HTML
+    var menu = document.createElement('div');
+    menu.className   = 'move-folder-menu';
+    menu.id          = 'globalMoveMenu';
+    menu.dataset.docId = docId;
+
+    var titleEl = document.createElement('div');
+    titleEl.style.cssText = 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding:6px 14px 4px;';
+    titleEl.textContent = 'Move to folder';
+    menu.appendChild(titleEl);
+
+    var sepEl = document.createElement('div');
+    sepEl.className = 'move-sep';
+    menu.appendChild(sepEl);
+
+    // Unfiled option
+    var unfiledBtn = document.createElement('button');
+    unfiledBtn.innerHTML = '<i class="fa-solid fa-inbox" style="color:var(--muted)"></i> Unfiled' + (!doc.folderId ? ' <span style="margin-left:auto;color:var(--accent)">✓</span>' : '');
+    unfiledBtn.onclick = function(e) { e.stopPropagation(); App.moveDocToFolder(docId, null); };
+    menu.appendChild(unfiledBtn);
+
+    if (folders.length) {
+      var sep2 = document.createElement('div');
+      sep2.className = 'move-sep';
+      menu.appendChild(sep2);
+      folders.forEach(function(f) {
+        var btn = document.createElement('button');
+        var isCurrent = doc.folderId === f.id;
+        btn.innerHTML = '<i class="fa-solid fa-folder"></i>' + escHtml(f.name) + (isCurrent ? ' <span style="margin-left:auto;color:var(--accent)">✓</span>' : '');
+        btn.onclick = function(e) { e.stopPropagation(); App.moveDocToFolder(docId, f.id); };
+        menu.appendChild(btn);
+      });
+    }
+
+    // New folder shortcut
+    var sep3 = document.createElement('div');
+    sep3.className = 'move-sep';
+    menu.appendChild(sep3);
+    var newBtn = document.createElement('button');
+    newBtn.innerHTML = '<i class="fa-solid fa-folder-plus" style="color:var(--accent)"></i> <span style="color:var(--accent)">New folder…</span>';
+    newBtn.onclick = function(e) {
+      e.stopPropagation();
+      closeAllMoveFolderMenus();
+      var name = prompt('Folder name:');
+      if (!name || !name.trim()) return;
+      var fid = genId();
+      persistFolder(fid, name.trim());
+      App.moveDocToFolder(docId, fid);
+    };
+    menu.appendChild(newBtn);
+
+    document.body.appendChild(menu);
+
+    // Position below the button
+    var rect  = btnEl.getBoundingClientRect();
+    var menuW = 200;
+    var left  = rect.right - menuW;
+    if (left < 8) left = rect.left;
+    menu.style.top  = (rect.bottom + 4) + 'px';
+    menu.style.left = left + 'px';
+    menu.style.display = 'block';
+  }
+
+  function closeAllMoveFolderMenus() {
+    var m = document.getElementById('globalMoveMenu');
+    if (m) m.remove();
   }
 
   function openDoc(id) {
@@ -532,14 +801,17 @@ const App = (() => {
   function deleteDoc(id) {
     if (!confirm('Delete this document? Cannot be undone.')) return;
     if (id === currentDocId) currentDocId = null;
-    deleteDocById(id); renderDocList();
+    deleteDocById(id);
+    renderFolderList();
+    renderDocList();
   }
 
   function duplicateDoc(id) {
     var doc = loadDocById(id);
     if (!doc) return;
     var newId = genId();
-    persistDoc(newId, doc.title + ' (copy)', doc.content);
+    persistDoc(newId, doc.title + ' (copy)', doc.content, doc.folderId);
+    renderFolderList();
     renderDocList();
   }
 
@@ -598,8 +870,9 @@ const App = (() => {
   function backupAllDocs() {
     var idx  = getIndex();
     if (!idx.length) { alert('No saved documents to back up.'); return; }
-    var docs = idx.map(function(id) { return loadDocById(id); }).filter(Boolean);
-    var payload = JSON.stringify({ version: 1, exported: Date.now(), docs: docs }, null, 2);
+    var docs    = idx.map(function(id) { return loadDocById(id); }).filter(Boolean);
+    var folders = getFolderIndex().map(loadFolderById).filter(Boolean);
+    var payload = JSON.stringify({ version: 2, exported: Date.now(), folders: folders, docs: docs }, null, 2);
     var date    = new Date().toISOString().slice(0, 10);
     dl('gaggle-docs-backup-' + date + '.json', payload, 'application/json;charset=utf-8');
   }
@@ -619,11 +892,37 @@ const App = (() => {
         alert('Backup file contains no documents.'); return;
       }
 
-      var imported = 0, skipped = 0, replaced = 0;
+      // Restore folders first (v2 backups), building a map of old->new folder ids
+      var folderIdMap = {};
+      if (payload.folders && Array.isArray(payload.folders)) {
+        payload.folders.forEach(function(f) {
+          if (!f || !f.id || !f.name) return;
+          var existingIdx = getFolderIndex();
+          var alreadyExists = existingIdx.some(function(fid) {
+            var ef = loadFolderById(fid);
+            return ef && ef.name === f.name;
+          });
+          if (alreadyExists) {
+            // Map to the existing folder with the same name
+            var match = getFolderIndex().find(function(fid) {
+              var ef = loadFolderById(fid);
+              return ef && ef.name === f.name;
+            });
+            folderIdMap[f.id] = match || f.id;
+          } else {
+            var newFid = getFolderIndex().indexOf(f.id) === -1 ? f.id : genId();
+            persistFolder(newFid, f.name);
+            folderIdMap[f.id] = newFid;
+          }
+        });
+      }
+
+      var imported = 0, replaced = 0;
 
       payload.docs.forEach(function(doc) {
         if (!doc || !doc.id || !doc.title || !doc.content) return;
-
+        // Remap folderId if present
+        var mappedFolderId = doc.folderId ? (folderIdMap[doc.folderId] || doc.folderId) : null;
         var existingId = findDocByTitle(doc.title);
 
         if (existingId) {
@@ -633,28 +932,25 @@ const App = (() => {
             'Cancel → Keep both (import as copy)'
           );
           if (answer) {
-            // Replace — reuse the existing id so it opens seamlessly
-            persistDoc(existingId, doc.title, doc.content);
+            persistDoc(existingId, doc.title, doc.content, mappedFolderId);
             replaced++;
           } else {
-            // Keep both — give the import a new id and a "(restored)" suffix
             var newId = genId();
-            persistDoc(newId, doc.title + ' (restored)', doc.content);
+            persistDoc(newId, doc.title + ' (restored)', doc.content, mappedFolderId);
             imported++;
           }
         } else {
-          // No conflict — restore with original id preserved if possible
           var targetId = getIndex().indexOf(doc.id) === -1 ? doc.id : genId();
-          persistDoc(targetId, doc.title, doc.content);
+          persistDoc(targetId, doc.title, doc.content, mappedFolderId);
           imported++;
         }
       });
 
       var msg = [];
-      if (imported)  msg.push(imported  + ' document' + (imported  !== 1 ? 's' : '') + ' imported');
-      if (replaced)  msg.push(replaced  + ' replaced');
-      if (skipped)   msg.push(skipped   + ' skipped');
+      if (imported) msg.push(imported + ' document' + (imported !== 1 ? 's' : '') + ' imported');
+      if (replaced) msg.push(replaced + ' replaced');
       alert('Restore complete: ' + msg.join(', ') + '.');
+      renderFolderList();
       renderDocList();
     };
     reader.readAsText(file);
@@ -1217,6 +1513,7 @@ const App = (() => {
     zoom, focusEditor, autoSave,
     showSaveDialog, closeSaveDialog, confirmSave,
     showDocManager, closeDocManager, openDoc, deleteDoc, duplicateDoc,
+    selectFolder, newFolder, renameFolder, deleteFolder, moveDocToFolder, toggleMoveFolderMenu,
     handleFileOpen, backupAllDocs, restoreFromBackup,
     toggleSettings, setUiTheme, setPageTheme,
     saveDefaultSettings,

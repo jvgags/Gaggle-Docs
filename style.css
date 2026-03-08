@@ -477,6 +477,119 @@ body {
 .doc-item-action:hover { background: var(--active); color: var(--accent); }
 .doc-empty { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 14px; }
 
+/* ── Drive / Folder modal ─────────────────────────────────────── */
+.modal-drive { width: 740px; max-width: 96vw; }
+
+.drive-body {
+  display: flex; height: 420px; border-top: 1px solid var(--border);
+}
+
+/* Sidebar */
+.drive-sidebar {
+  width: 190px; min-width: 190px; border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; background: var(--bg); flex-shrink: 0;
+  overflow-y: auto;
+}
+.drive-new-folder-btn {
+  display: flex; align-items: center; gap: 8px;
+  margin: 10px 10px 6px; padding: 7px 12px;
+  background: none; border: 1px dashed var(--border); border-radius: 6px;
+  font-size: 12px; color: var(--muted); cursor: pointer; transition: all .15s;
+}
+.drive-new-folder-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--active); }
+.drive-new-folder-btn i { font-size: 13px; }
+
+.drive-folder-list { flex: 1; padding: 4px 0; }
+
+.drive-folder-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 7px 12px;
+  font-size: 13px; color: var(--text); cursor: pointer; text-align: left;
+  transition: background .1s; position: relative; user-select: none;
+}
+.drive-folder-item:hover { background: var(--hover); }
+.drive-folder-item.active { background: var(--active); color: var(--accent); font-weight: 600; }
+.drive-folder-item .folder-icon { font-size: 14px; flex-shrink: 0; color: #f4b942; }
+.drive-folder-item.active .folder-icon { color: var(--accent); }
+.drive-folder-item .folder-name {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.drive-folder-item .folder-count {
+  font-size: 10px; color: var(--muted); background: var(--border);
+  padding: 1px 5px; border-radius: 8px; flex-shrink: 0;
+}
+.drive-folder-item .folder-actions {
+  display: none; align-items: center; gap: 2px; flex-shrink: 0;
+}
+.drive-folder-item:hover .folder-count  { display: none; }
+.drive-folder-item:hover .folder-actions { display: flex; }
+.drive-folder-item .folder-action-btn {
+  width: 22px; height: 22px; border: none; background: none; border-radius: 3px;
+  cursor: pointer; font-size: 11px; color: var(--muted); padding: 0;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.drive-folder-item .folder-action-btn:hover { background: var(--border); color: var(--text); }
+.drive-folder-sep {
+  height: 1px; background: var(--border); margin: 6px 10px;
+}
+
+/* Main panel */
+.drive-main {
+  flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden;
+}
+.drive-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0; gap: 8px;
+}
+.drive-breadcrumb {
+  font-size: 13px; font-weight: 600; color: var(--text); flex: 1;
+  display: flex; align-items: center; gap: 6px;
+}
+.drive-breadcrumb .crumb { cursor: pointer; color: var(--accent); }
+.drive-breadcrumb .crumb:hover { text-decoration: underline; }
+.drive-breadcrumb .crumb-sep { color: var(--muted); font-size: 11px; }
+.drive-breadcrumb .crumb-current { color: var(--text); cursor: default; }
+.drive-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+.btn-sm { padding: 4px 10px !important; font-size: 12px !important; }
+
+.drive-doc-list {
+  flex: 1; overflow-y: auto; overflow-x: visible; padding: 8px 12px;
+  display: flex; flex-direction: column; gap: 4px;
+  max-height: none;
+}
+.drive-doc-list::-webkit-scrollbar { width: 6px; }
+.drive-doc-list::-webkit-scrollbar-thumb { background: #c5bfb8; border-radius: 3px; }
+
+/* Doc item folder badge */
+.doc-item-folder {
+  font-size: 10px; color: var(--muted); margin-top: 2px;
+  display: flex; align-items: center; gap: 4px;
+}
+.doc-item-folder i { font-size: 9px; color: #f4b942; }
+
+/* Move-to-folder dropdown - rendered on body to avoid overflow clipping */
+.move-folder-menu {
+  position: fixed;
+  background: var(--page); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.18); z-index: 99999;
+  min-width: 200px; padding: 4px 0; overflow: hidden;
+}
+.move-folder-menu button {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 7px 14px; border: none; background: none;
+  font-size: 12.5px; color: var(--text); cursor: pointer; text-align: left;
+}
+.move-folder-menu button:hover { background: var(--hover); }
+.move-folder-menu button i { color: #f4b942; font-size: 12px; width: 14px; flex-shrink: 0; }
+.move-folder-menu .move-sep { height: 1px; background: var(--border); margin: 4px 0; }
+
+/* Folder rename inline input */
+.folder-rename-input {
+  flex: 1; border: none; outline: none; background: transparent;
+  font-size: 13px; color: var(--text); padding: 0; font-family: inherit;
+}
+
 /* ── Print ────────────────────────────────────────────────────── */
 @media print {
   .topbar, .menubar, .toolbar, .find-bar, .statusbar, .outline-sidebar { display: none !important; }

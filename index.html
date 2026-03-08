@@ -279,24 +279,42 @@
 
 <!-- ══ DOC MANAGER ════════════════════════════════════════════════ -->
 <div class="modal-overlay" id="docManager" style="display:none" onclick="if(event.target===this)App.closeDocManager()">
-  <div class="modal modal-wide">
+  <div class="modal modal-drive">
     <div class="modal-header">
-      <h3>My Documents</h3>
+      <h3 id="docManagerTitle">My Documents</h3>
       <button class="modal-close" onclick="App.closeDocManager()"><i class="fa-solid fa-xmark"></i></button>
     </div>
-    <div class="modal-body">
-      <div id="docList" class="doc-list"></div>
+    <div class="drive-body">
+
+      <!-- Folder sidebar -->
+      <aside class="drive-sidebar">
+        <button class="drive-new-folder-btn" onclick="App.newFolder()">
+          <i class="fa-solid fa-folder-plus"></i> New folder
+        </button>
+        <div class="drive-folder-list" id="driveFolderList"></div>
+      </aside>
+
+      <!-- Doc panel -->
+      <div class="drive-main">
+        <div class="drive-toolbar">
+          <div class="drive-breadcrumb" id="driveBreadcrumb"></div>
+          <div class="drive-actions">
+            <button class="btn-secondary btn-sm" onclick="document.getElementById('openFileInput').click()">
+              <i class="fa-solid fa-upload"></i> Import
+            </button>
+            <button class="btn-secondary btn-sm" onclick="App.backupAllDocs()">
+              <i class="fa-solid fa-box-archive"></i> Backup
+            </button>
+            <button class="btn-secondary btn-sm" onclick="document.getElementById('restoreFileInput').click()">
+              <i class="fa-solid fa-clock-rotate-left"></i> Restore
+            </button>
+          </div>
+        </div>
+        <div id="docList" class="doc-list drive-doc-list"></div>
+      </div>
+
     </div>
     <div class="modal-footer">
-      <button class="btn-secondary" onclick="document.getElementById('openFileInput').click()">
-        <i class="fa-solid fa-upload"></i> Import file (.html / .md / .txt / .docx)
-      </button>
-      <button class="btn-secondary" onclick="App.backupAllDocs()">
-        <i class="fa-solid fa-box-archive"></i> Backup
-      </button>
-      <button class="btn-secondary" onclick="document.getElementById('restoreFileInput').click()">
-        <i class="fa-solid fa-clock-rotate-left"></i> Restore
-      </button>
       <button class="btn-ghost" onclick="App.closeDocManager()">Close</button>
     </div>
   </div>
