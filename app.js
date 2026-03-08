@@ -156,6 +156,9 @@ const App = (() => {
     if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'o') {
       e.preventDefault(); toggleOutline(); return;
     }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'm') {
+      e.preventDefault(); copyAsMarkdown(); return;
+    }
     if (!(e.ctrlKey || e.metaKey)) return;
     switch (e.key.toLowerCase()) {
       case 'b': e.preventDefault(); fmt('bold');      break;
@@ -354,6 +357,8 @@ const App = (() => {
   function toggleFind() {
     var vis = findBar.style.display !== 'none';
     findBar.style.display = vis ? 'none' : 'flex';
+    var btn = document.getElementById('btnFind');
+    if (btn) btn.classList.toggle('active', !vis);
     if (!vis) document.getElementById('findInput').focus();
   }
   function findReplace() {
@@ -589,6 +594,81 @@ const App = (() => {
     event.target.value = '';
   }
 
+  // ── BACKUP & RESTORE ─────────────────────────────────────────
+  function backupAllDocs() {
+    var idx  = getIndex();
+    if (!idx.length) { alert('No saved documents to back up.'); return; }
+    var docs = idx.map(function(id) { return loadDocById(id); }).filter(Boolean);
+    var payload = JSON.stringify({ version: 1, exported: Date.now(), docs: docs }, null, 2);
+    var date    = new Date().toISOString().slice(0, 10);
+    dl('gaggle-docs-backup-' + date + '.json', payload, 'application/json;charset=utf-8');
+  }
+
+  function restoreFromBackup(event) {
+    var file = event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var payload;
+      try { payload = JSON.parse(e.target.result); }
+      catch(err) { alert('Invalid backup file — could not parse JSON.'); return; }
+
+      if (!payload.docs || !Array.isArray(payload.docs) || !payload.docs.length) {
+        alert('Backup file contains no documents.'); return;
+      }
+
+      var imported = 0, skipped = 0, replaced = 0;
+
+      payload.docs.forEach(function(doc) {
+        if (!doc || !doc.id || !doc.title || !doc.content) return;
+
+        var existingId = findDocByTitle(doc.title);
+
+        if (existingId) {
+          var answer = confirm(
+            '"' + doc.title + '" already exists.\n\n' +
+            'OK → Replace existing\n' +
+            'Cancel → Keep both (import as copy)'
+          );
+          if (answer) {
+            // Replace — reuse the existing id so it opens seamlessly
+            persistDoc(existingId, doc.title, doc.content);
+            replaced++;
+          } else {
+            // Keep both — give the import a new id and a "(restored)" suffix
+            var newId = genId();
+            persistDoc(newId, doc.title + ' (restored)', doc.content);
+            imported++;
+          }
+        } else {
+          // No conflict — restore with original id preserved if possible
+          var targetId = getIndex().indexOf(doc.id) === -1 ? doc.id : genId();
+          persistDoc(targetId, doc.title, doc.content);
+          imported++;
+        }
+      });
+
+      var msg = [];
+      if (imported)  msg.push(imported  + ' document' + (imported  !== 1 ? 's' : '') + ' imported');
+      if (replaced)  msg.push(replaced  + ' replaced');
+      if (skipped)   msg.push(skipped   + ' skipped');
+      alert('Restore complete: ' + msg.join(', ') + '.');
+      renderDocList();
+    };
+    reader.readAsText(file);
+  }
+
+  function findDocByTitle(title) {
+    var idx = getIndex();
+    for (var i = 0; i < idx.length; i++) {
+      var doc = loadDocById(idx[i]);
+      if (doc && doc.title === title) return idx[i];
+    }
+    return null;
+  }
+
   function mdToHtml(md) {
     var lines = md.split('\n');
     var out = [];
@@ -757,6 +837,68 @@ const App = (() => {
     else if (format === 'rtf')  exportRTF(title, html);
     else if (format === 'html') exportHTML(title, html);
     else if (format === 'txt')  exportTxt(title);
+  }
+
+  // ── COPY AS MARKDOWN ─────────────────────────────────────────
+  function copyAsMarkdown() {
+    var sel   = window.getSelection();
+    var html  = (sel && !sel.isCollapsed)
+      ? (function() {
+          var frag = sel.getRangeAt(0).cloneContents();
+          var div  = document.createElement('div');
+          div.appendChild(frag);
+          return div.innerHTML;
+        })()
+      : editor.innerHTML;
+
+    var td = new TurndownService({ headingStyle: 'atx', bulletListMarker: '-', codeBlockStyle: 'fenced' });
+    td.addRule('tables', {
+      filter: ['table'],
+      replacement: function(content, node) {
+        var rows = Array.from(node.querySelectorAll('tr'));
+        if (!rows.length) return content;
+        var toMd = function(r) {
+          return '| ' + Array.from(r.querySelectorAll('th,td')).map(function(c) {
+            return c.innerText.trim().replace(/\|/g, '\\|');
+          }).join(' | ') + ' |';
+        };
+        var hd  = toMd(rows[0]);
+        var sep = '| ' + Array.from(rows[0].querySelectorAll('th,td')).map(function() { return '---'; }).join(' | ') + ' |';
+        var body = rows.slice(1).map(toMd).join('\n');
+        return '\n\n' + hd + '\n' + sep + (body ? '\n' + body : '') + '\n\n';
+      }
+    });
+
+    var md  = td.turndown(html);
+    var btn = document.getElementById('btnCopyMd');
+
+    function flashBtn() {
+      if (!btn) return;
+      btn.classList.add('active');
+      btn.title = 'Copied!';
+      setTimeout(function() {
+        btn.classList.remove('active');
+        btn.title = 'Copy as Markdown (Ctrl+Shift+M)';
+      }, 1500);
+    }
+
+    function fallbackCopy() {
+      var ta = document.createElement('textarea');
+      ta.value = md;
+      ta.style.position = 'fixed';
+      ta.style.opacity  = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      flashBtn();
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(md).then(flashBtn).catch(fallbackCopy);
+    } else {
+      fallbackCopy();
+    }
   }
 
   function exportMarkdown(title, html) {
@@ -1071,11 +1213,11 @@ const App = (() => {
   return {
     init, fmt, setFont, setFontSize, setHeading, setTextColor, setHighlight,
     toggleHlPicker, clearFormat, insertLink, insertHR, insertTable, insertImage,
-    selectAll, toggleFind, findReplace, toggleOutline, saveAs, newDoc, printDoc,
+    selectAll, toggleFind, findReplace, toggleOutline, saveAs, copyAsMarkdown, newDoc, printDoc,
     zoom, focusEditor, autoSave,
     showSaveDialog, closeSaveDialog, confirmSave,
     showDocManager, closeDocManager, openDoc, deleteDoc, duplicateDoc,
-    handleFileOpen,
+    handleFileOpen, backupAllDocs, restoreFromBackup,
     toggleSettings, setUiTheme, setPageTheme,
     saveDefaultSettings,
     toggleNovelMode, applyNovelSettings, insertSceneBreak,

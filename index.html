@@ -67,6 +67,9 @@
       <button onclick="App.saveAs('md')"><i class="fa-brands fa-markdown"></i> Download as Markdown</button>
       <button onclick="App.saveAs('docx')"><i class="fa-solid fa-file-word"></i> Download as Word</button>
       <button onclick="App.saveAs('rtf')"><i class="fa-solid fa-file-lines"></i> Download as RTF</button>
+      <hr/>
+      <button onclick="App.backupAllDocs()"><i class="fa-solid fa-box-archive"></i> Backup all documents</button>
+      <button onclick="document.getElementById('restoreFileInput').click()"><i class="fa-solid fa-clock-rotate-left"></i> Restore from backup</button>
     </div>
   </div>
   <div class="menu-group">
@@ -81,6 +84,8 @@
       <hr/>
       <button onclick="App.selectAll()"><i class="fa-solid fa-object-group"></i> Select all</button>
       <button onclick="App.toggleFind()"><i class="fa-solid fa-magnifying-glass"></i> Find &amp; Replace <span class="kbd">Ctrl+H</span></button>
+      <hr/>
+      <button onclick="App.copyAsMarkdown()"><i class="fa-brands fa-markdown"></i> Copy as Markdown <span class="kbd">Ctrl+Shift+M</span></button>
     </div>
   </div>
   <div class="menu-group">
@@ -193,6 +198,8 @@
 
   <button class="tb-btn" title="Insert link"      onclick="App.insertLink()"><i class="fa-solid fa-link"></i></button>
   <button class="tb-btn" title="Clear formatting" onclick="App.clearFormat()"><i class="fa-solid fa-eraser"></i></button>
+  <button class="tb-btn" id="btnFind" title="Find &amp; Replace (Ctrl+H)" onclick="App.toggleFind()"><i class="fa-solid fa-magnifying-glass"></i></button>
+  <button class="tb-btn" id="btnCopyMd" title="Copy as Markdown (Ctrl+Shift+M)" onclick="App.copyAsMarkdown()"><i class="fa-brands fa-markdown"></i></button>
   <div class="tb-sep"></div>
   <button class="tb-btn" id="btnOutline" title="Document outline (Ctrl+Alt+O)" onclick="App.toggleOutline()">
     <i class="fa-solid fa-list-ul"></i>
@@ -284,12 +291,19 @@
       <button class="btn-secondary" onclick="document.getElementById('openFileInput').click()">
         <i class="fa-solid fa-upload"></i> Import file (.html / .md / .txt / .docx)
       </button>
+      <button class="btn-secondary" onclick="App.backupAllDocs()">
+        <i class="fa-solid fa-box-archive"></i> Backup
+      </button>
+      <button class="btn-secondary" onclick="document.getElementById('restoreFileInput').click()">
+        <i class="fa-solid fa-clock-rotate-left"></i> Restore
+      </button>
       <button class="btn-ghost" onclick="App.closeDocManager()">Close</button>
     </div>
   </div>
 </div>
 
 <input type="file" id="openFileInput" accept=".html,.htm,.txt,.md,.docx" style="display:none" onchange="App.handleFileOpen(event)"/>
+<input type="file" id="restoreFileInput" accept=".json" style="display:none" onchange="App.restoreFromBackup(event)"/>
 
 <!-- ══ SETTINGS PANEL ════════════════════════════════════════════ -->
 <div class="settings-panel" id="settingsPanel">
