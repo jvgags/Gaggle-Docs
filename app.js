@@ -411,7 +411,10 @@ const App = (() => {
       span.className = 'outline-item-text';
       span.textContent = h.innerText || h.textContent || '(empty heading)';
       btn.appendChild(span);
-      btn.addEventListener('click', function() { scrollToHeading(h); });
+      btn.addEventListener('click', function(e) { 
+        console.log('Outline item clicked!', h, e);
+        scrollToHeading(h); 
+      });
       outlineList.appendChild(btn);
     });
 
@@ -419,11 +422,58 @@ const App = (() => {
   }
 
   function scrollToHeading(headingEl) {
-    headingEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    console.log('scrollToHeading called', headingEl);
+    var canvas = document.getElementById('canvas');
+    var page = document.getElementById('page');
+    
+    console.log('canvas:', canvas, 'page:', page);
+    
+    // Get the scale factor from the page transform
+    var pageStyle = window.getComputedStyle(page);
+    var transform = pageStyle.transform;
+    var scale = 1;
+    if (transform && transform !== 'none') {
+      var matrix = transform.match(/matrix\(([^)]+)\)/);
+      if (matrix) {
+        scale = parseFloat(matrix[1].split(',')[0]);
+      }
+    }
+    
+    console.log('Page scale factor:', scale);
+    
+    // Get positions relative to the page (not canvas)
+    var canvasScrollTop = canvas.scrollTop;
+    var headingOffsetTop = headingEl.offsetTop;
+    
+    console.log('headingOffsetTop:', headingOffsetTop, 'canvasScrollTop:', canvasScrollTop, 'scale:', scale);
+    
+    // Calculate target scroll position accounting for scale
+    var scrollTarget = headingOffsetTop * scale - 80;
+    
+    console.log('scrollTarget:', scrollTarget);
+    console.log('canvas.scrollTop before:', canvas.scrollTop);
+    console.log('canvas.scrollHeight:', canvas.scrollHeight);
+    console.log('canvas.clientHeight:', canvas.clientHeight);
+    
+    // Add smooth scroll behavior via CSS
+    canvas.style.scrollBehavior = 'smooth';
+    
+    // Scroll the canvas to the heading position
+    canvas.scrollTop = scrollTarget;
+    
+    console.log('canvas.scrollTop set to:', scrollTarget);
+    
+    setTimeout(function() {
+      console.log('canvas.scrollTop after 500ms:', canvas.scrollTop);
+    }, 500);
+    
+    // Visual feedback: briefly highlight the heading
     headingEl.style.transition = 'background .2s';
     headingEl.style.background = 'rgba(26,115,232,.12)';
-    setTimeout(function() { headingEl.style.background = ''; }, 900);
-    editor.focus();
+    setTimeout(function() { 
+      headingEl.style.background = ''; 
+      canvas.style.scrollBehavior = '';
+    }, 900);
   }
 
   function highlightActiveOutlineItem() {
